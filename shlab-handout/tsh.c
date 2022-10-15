@@ -186,16 +186,8 @@ void eval(char *cmdline)
         sigprocmask(SIG_SETMASK, &mask_one, &prev_one);   /* Block SIGCHLD */
         if((pid = fork()) == 0){       /* Child runs user job */
             sigprocmask(SIG_SETMASK, &prev_one, NULL);    /* Unblock SIGCHLD*/
-
             setpgid(0,0);  //avoid all process in the foreground group 
-
-            sigprocmask(SIG_BLOCK, &mask_all, NULL);  /* Parent process */
-            addjob(jobs,pid,1,cmdline);   /* Add the child to the job list, run in the background */
-            sigprocmask(SIG_SETMASK, &prev_one, NULL); /* Unblock SIGCHLD */
             if(execve(argv[0],argv,environ) < 0 ){
-                sigprocmask(SIG_BLOCK, &mask_all, &prev_all);  /* Parent process */
-                deletejob(jobs,pid);   /* Add the child to the job list, run in the background */
-                sigprocmask(SIG_SETMASK, &prev_all, NULL); /* Unblock SIGCHLD */
                 printf("%s: Command not found.\n",argv[0]);
                 exit(0);
             }
@@ -204,6 +196,11 @@ void eval(char *cmdline)
         if(!bg){
             int status;
             //pid_t child;
+            sigprocmask(SIG_BLOCK, &mask_all, NULL);  /* Parent process */
+            addjob(jobs,pid,1,cmdline);   /* Add the child to the job list, run in the foreground */
+            //printf("add the foreground job %d\n",pid);
+            sigprocmask(SIG_SETMASK, &prev_one, NULL); /* Unblock SIGCHLD */
+
             if(waitpid(pid, &status, 0) < 0)
                 unix_error("waitfg: waitpid error");    
             sigprocmask(SIG_BLOCK, &mask_all, &prev_all);  /* Parent process */
@@ -345,17 +342,19 @@ void sigint_handler(int sig)
 {
     int olderrno = errno;
     sigset_t mask_all,prev_all;
-
+    //struct job_t *job;
     pid_t pid;
     while((pid=fgpid(jobs))){
-        waitpid(pid,NULL,0);
+        //printf("Find the foreground %d\n",pid);
+        //waitpid(pid,NULL,0);    dont't nedd waitpid 
+        printf("Job [%d] (%d) terminated by signal 2\n",pid2jid(pid),pid);
         sigprocmask(SIG_BLOCK, &mask_all, &prev_all);  /* Parent process */
         deletejob(jobs,pid);   /* Add the child to the job list, run in the background */
         sigprocmask(SIG_SETMASK, &prev_all, NULL); /* Unblock SIGCHLD */
-        printf("Job [%d] (%d) terminated by signal 2\n",pid2jid(pid),pid);
+        
     }
     if(errno != ECHILD)
-        app_error("waitpid errod");
+    //    app_error("waitpid errod");
     sleep(1);
     errno = olderrno;
     return;
